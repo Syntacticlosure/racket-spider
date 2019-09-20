@@ -18,7 +18,7 @@ an easier way to write web spiders in racket
 ```
 
 # proxy
-Both spider/get and spider/host support http proxy currently,the proxy argument is a list contains your proxy configuration.
+Both spider/get and spider/post support http proxy currently,the proxy argument is a list contains your proxy configuration.
 
 proxy = (list address port)
 
@@ -27,7 +27,7 @@ for example:
 proxy = (list "127.0.0.1" 1080)
 
 # cookies
-Both spider/get and spider/host will handle cookies automatically:
+Both spider/get and spider/post will handle cookies automatically:
 
 1) add cookies to headers
 
