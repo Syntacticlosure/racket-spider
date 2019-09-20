@@ -33,7 +33,6 @@
                                                          #:ssl? (if ssl? 'auto #f)))
                              list)
                             (if ssl? 'auto #f)))
-  (display (attach-cookies headers url-form))
   (define-values (a b result)
     (http-sendrecv (url-host url-form)
                    url-str
