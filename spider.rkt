@@ -1,19 +1,29 @@
 #lang typed/racket
-(require typed/net/http-client typed/net/url typed/net/uri-codec
-         typed/openssl typed/racket/unsafe
+(require typed/net/url typed/net/uri-codec typed/openssl
          (for-syntax syntax/parse))
-(unsafe-require/typed racket/base [(values unsafe-cast) (All (a b) (-> a b))])
-(define-type BaseSSL (U False Symbol SSL-Client-Context))
-(require/typed net/http-client [http-conn-CONNECT-tunnel
-                                (->* ((U Bytes String)
-                                      Integer
-                                      (U Bytes String)
-                                      Integer)
-                                     (#:ssl? BaseSSL)
-                                     (Values BaseSSL
-                                             Input-Port
-                                             Output-Port
-                                             (-> Port Void)))])
+
+(define-type Base-SSL (U False Symbol SSL-Client-Context))
+(define-type Base-SSL-Tnc (U Base-SSL
+                             (List Base-SSL Input-Port Output-Port (-> Port Void))))
+(define-type BString (U Bytes String))
+
+(require/typed net/http-client
+               [http-conn-CONNECT-tunnel
+                (->* ((U Bytes String)
+                      Integer
+                      (U Bytes String)
+                      Integer)
+                     (#:ssl? Base-SSL)
+                     (Values Base-SSL
+                             Input-Port
+                             Output-Port
+                             (-> Port Void)))]
+               [http-sendrecv
+                (->* [BString BString]
+                     [#:ssl? Base-SSL-Tnc #:port Positive-Integer #:version BString
+                      #:method (U BString Symbol) #:headers (Listof BString) #:data (Option BString) 
+                      #:content-decode (Listof Symbol)]
+                     (values Bytes (Listof Bytes) Input-Port))])
                                               
 (provide spider/get spider/post spider/post-form)
 (define-type ProxyType (U (List String Integer) False))
@@ -26,6 +36,10 @@
                 [data : DataType]
                 [proxy : ProxyType])
   (define url-form (string->url url-str))
+  (define host (let ([t (url-host url-form)])
+                 (if t t
+                     (error 'spider
+                            "spider.rkt : couldn't get host"))))
   (define ssl? (string=? "https" (let ([scheme (url-scheme url-form)])
                                    (if scheme scheme
                                        (error 'spider
@@ -35,19 +49,18 @@
                              443
                              80))
   (define ssl-parameter (if proxy
-                            (call-with-values
-                             (λ ()
-                               (http-conn-CONNECT-tunnel (first proxy)
-                                                         (second proxy)
-                                                         (url-host url-form)
-                                                         port-parameter
-                                                         #:ssl? (if ssl? 'auto #f)))
-                             list)
+                            (let-values ([(v1 v2 v3 v4)
+                                          (http-conn-CONNECT-tunnel (first proxy)
+                                                                    (second proxy)
+                                                                    (url-host url-form)
+                                                                    port-parameter
+                                                                    #:ssl? (if ssl? 'auto #f))])
+                              (list v1 v2 v3 v4))
                             (if ssl? 'auto #f)))
   (define-values (a b result)
-    (http-sendrecv (url-host url-form)
+    (http-sendrecv host
                    url-str
-                   #:ssl? (unsafe-cast ssl-parameter) ; hacks
+                   #:ssl? ssl-parameter
                    #:headers headers
                    #:data data
                    #:port port-parameter
