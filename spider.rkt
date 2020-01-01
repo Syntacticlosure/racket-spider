@@ -1,7 +1,6 @@
 #lang typed/racket
 (require typed/net/http-client typed/net/url typed/net/uri-codec
-         typed/net/cookies typed/openssl
-         typed/racket/unsafe
+         typed/openssl typed/racket/unsafe
          (for-syntax syntax/parse))
 (unsafe-require/typed racket/base [(values unsafe-cast) (All (a b) (-> a b))])
 (define-type BaseSSL (U False Symbol SSL-Client-Context))
@@ -77,8 +76,3 @@
   (syntax-parse stx
     [(_ (~seq key:id value) ...) #'(alist->form-urlencoded (list (cons 'key value)
                                                                  ...))]))
-
-
-
-
-         
