@@ -1,25 +1,37 @@
-#lang racket
-(require net/http-client net/url net/uri-codec net/cookies
+#lang typed/racket
+(require typed/net/http-client typed/net/url typed/net/uri-codec
+         typed/net/cookies typed/openssl
+         typed/racket/unsafe
          (for-syntax syntax/parse))
+(unsafe-require/typed racket/base [(values unsafe-cast) (All (a b) (-> a b))])
+(define-type BaseSSL (U False Symbol SSL-Client-Context))
+(require/typed net/http-client [http-conn-CONNECT-tunnel
+                                (->* ((U Bytes String)
+                                      Integer
+                                      (U Bytes String)
+                                      Integer)
+                                     (#:ssl? BaseSSL)
+                                     (Values BaseSSL
+                                             Input-Port
+                                             Output-Port
+                                             (-> Port Void)))])
+                                              
 (provide spider/get spider/post spider/post-form)
+(define-type ProxyType (U (List String Integer) False))
+(define-type HeadersType (U (Listof String) (Listof Bytes)))
+(define-type DataType (U String Bytes False))
 
-(define (attach-cookies original-headers url-form)
-  (if (cookie-header url-form)
-    (let ()
-    (define string-header? (and (not (null? original-headers))
-                                (string? (first original-headers))))
-    (if string-header?
-        (cons (format "Cookie : ~a" (cookie-header url-form))
-              original-headers)
-        (cons (bytes-append #"Cookie :" (cookie-header url-form))
-              original-headers))
-      )
-    original-headers
-      ))
-  
-(define (helper url-str method headers data proxy)
+(define (helper [url-str : String]
+                [method : String]
+                [headers : HeadersType]
+                [data : DataType]
+                [proxy : ProxyType])
   (define url-form (string->url url-str))
-  (define ssl? (string=? "https" (url-scheme url-form)))
+  (define ssl? (string=? "https" (let ([scheme (url-scheme url-form)])
+                                   (if scheme scheme
+                                       (error 'spider
+                                              "spider.rkt : couldn't get protocol of request"
+                                              url-str)))))
   (define port-parameter (if ssl?
                              443
                              80))
@@ -36,29 +48,37 @@
   (define-values (a b result)
     (http-sendrecv (url-host url-form)
                    url-str
-                   #:ssl? ssl-parameter
-                   #:headers (attach-cookies headers url-form)
+                   #:ssl? (unsafe-cast ssl-parameter) ; hacks
+                   #:headers headers
                    #:data data
                    #:port port-parameter
                    #:method method))
-  (extract-and-save-cookies! b url-form)
   
   (if (bytes=? a #"HTTP/1.1 200 OK")
       result
-      (error "Bad Request :" a result)))
+      (raise-user-error "Bad Request :" url-str a (port->string result))))
 
-(define (spider/get url-str #:headers [headers empty]
-                    #:proxy [proxy #f])
-  (helper url-str "GET" headers #f  proxy)
-  )
-(define default-post-headers (list "Content-Type: application/x-www-form-urlencoded"))
-(define (spider/post url-str #:headers [headers default-post-headers]
-                     #:proxy [proxy #f]
-                     #:data [data #f])
+(define default-post-headers : HeadersType
+  (list "Content-Type: application/x-www-form-urlencoded"))
+
+(define (spider/get [url-str : String]
+                    #:headers [headers : HeadersType empty]
+                    #:proxy [proxy : ProxyType #f]
+                    )
+  (helper url-str "GET" headers #f  proxy))
+
+(define (spider/post [url-str : String]
+                     #:headers [headers : HeadersType default-post-headers]
+                     #:proxy [proxy : ProxyType #f]
+                     #:data [data : DataType #f])
   (helper url-str "POST" headers data proxy))
 
 (define-syntax (spider/post-form stx)
   (syntax-parse stx
     [(_ (~seq key:id value) ...) #'(alist->form-urlencoded (list (cons 'key value)
                                                                  ...))]))
-  
+
+
+
+
+         
