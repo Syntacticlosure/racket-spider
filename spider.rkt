@@ -52,7 +52,7 @@
                             (let-values ([(v1 v2 v3 v4)
                                           (http-conn-CONNECT-tunnel (first proxy)
                                                                     (second proxy)
-                                                                    (url-host url-form)
+                                                                    host
                                                                     port-parameter
                                                                     #:ssl? (if ssl? 'auto #f))])
                               (list v1 v2 v3 v4))
